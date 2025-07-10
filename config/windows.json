@@ -1,0 +1,12 @@
+{
+    "allowed_paths": [
+      "C:\\Users\\<user>\\Documents",
+      "C:\\Users\\<user>\\Desktop",
+      "C:\\Users\\<user>\\Downloads"
+    ],
+    "max_file_size": "20MB",
+    "allowed_extensions": [
+      "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
+    ]
+  }
+  
