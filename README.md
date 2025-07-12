@@ -34,6 +34,19 @@ On **Windows PowerShell**:
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
+On **Linux/Mac**:
+```
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+or if your system does not have ```curl```, try with ```wget```
+```
+wget -qO- https://astral.sh/uv/install.sh | sh
+```
+or install by requesting a specific version
+```
+curl -LsSf https://astral.sh/uv/0.7.20/install.sh | sh
+```
+
 > Make sure uv is available in your system PATH.
 
 ```bash
