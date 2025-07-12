@@ -1,12 +1,11 @@
 {
-    "allowed_paths": [
-      "~/Documents",
-      "~/Desktop",
-      "~/Downloads"
-    ],
-    "max_file_size": "20MB",
-    "allowed_extensions": [
-      "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
-    ]
-  }
+  "allowed_paths": [
+    "~/Desktop",
+    "~/Downloads"
+  ],
+  "max_file_size": "20MB",
+  "allowed_extensions": [
+    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
+  ]
+}
   

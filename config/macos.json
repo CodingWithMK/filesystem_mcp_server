@@ -1,12 +1,11 @@
 {
-    "allowed_paths": [
-      "/Users/<user>/Documents",
-      "/Users/<user>/Desktop",
-      "/Users/<user>/Downloads"
-    ],
-    "max_file_size": "20MB",
-    "allowed_extensions": [
-      "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
-    ]
-  }
+  "allowed_paths": [
+    "/Users/musab/Desktop",
+    "/Users/musab/Downloads"
+  ],
+  "max_file_size": "20MB",
+  "allowed_extensions": [
+    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
+  ]
+}
   
