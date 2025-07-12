@@ -26,6 +26,16 @@ This project is a Python-based MCP (Model Context Protocol) server that allows C
 
 ## 📦 Installation
 
+### Install `uv` (recommended)
+
+On **Windows PowerShell**:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+> Make sure uv is available in your system PATH.
+
 ```bash
 git clone https://github.com/yourusername/python-mcp-filesystem-server.git
 cd python-mcp-filesystem-server
@@ -38,16 +48,46 @@ pip install -r requirements.txt
 
 ## ⚙️ Configuration
 
-Edit `config/server_config.json` to define allowed paths and other settings:
+Edit `config/windows.json`, `config/macos.json`, `config/default.json` to define allowed paths and other settings:
 
 ```json
+windows.json
 {
-  "security": {
-    "allowed_paths": ["/Users/you/Documents", "/Users/you/Desktop"],
-    "max_file_size": "10MB",
-    "allowed_extensions": [".txt", ".md", ".py", ".json"],
-    "enable_audit_log": true
-  }
+  "allowed_paths": [
+    "C:\\Users\\username\\Desktop",
+    "C:\\Users\\username\\Downloads"
+  ],
+  "max_file_size": "20MB",
+  "allowed_extensions": [
+    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
+  ]
+}
+```
+
+```json
+macos.json
+{
+  "allowed_paths": [
+    "/Users/username/Desktop",
+    "/Users/username/Downloads"
+  ],
+  "max_file_size": "20MB",
+  "allowed_extensions": [
+    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
+  ]
+}
+```
+```json
+default.json
+{
+  "allowed_paths": [
+    "~/Desktop",
+    "~/Downloads"
+  ],
+  "max_file_size": "20MB",
+  "allowed_extensions": [
+    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
+  ]
 }
 ```
 
@@ -57,11 +97,14 @@ Configure Claude Desktop as follows:
 {
   "mcpServers": {
     "python-filesystem": {
-      "command": "python",
-      "args": [
-        "/absolute/path/to/src/server.py",
-        "--config",
-        "/absolute/path/to/config/server_config.json"
+      "command": "C:\\Users\\username\\.local\\bin\\uv.EXE",
+      "args":[
+        "run",
+        "--with",
+        "mcp[cli]",
+        "mcp",
+        "run",
+        "C:\\Users\\username\\Documents\\filesystem_mcp_server\\src\\main.py"
       ]
     }
   }
