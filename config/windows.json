@@ -1,7 +1,7 @@
 {
   "allowed_paths": [
-    "C:\\Users\\musab\\Desktop",
-    "C:\\Users\\musab\\Downloads"
+    "C:\\Users\\username\\Desktop",
+    "C:\\Users\\username\\Downloads"
   ],
   "max_file_size": "20MB",
   "allowed_extensions": [
