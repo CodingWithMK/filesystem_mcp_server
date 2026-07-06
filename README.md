@@ -8,7 +8,7 @@ This project is a Python-based MCP (Model Context Protocol) server that allows C
 
 - ✅ Fully compatible with Claude Desktop
 - 📂 Read, write, move, delete, and search files
-- 🔒 Path validation & permission control
+- 🔒 Thread-sade deterministic locking, stric path validation & permission control
 - 🧠 JSON-RPC 2.0 communication over stdin/stdout
 - 🔄 Asynchronous architecture with `asyncio`
 - 🧪 Unit & integration tests included
@@ -19,7 +19,7 @@ This project is a Python-based MCP (Model Context Protocol) server that allows C
 
 - **Python** 3.11
 - **AsyncIO**, **Pathlib**, **JSON**, **Typing**
-- **Claude Desktop** (latest version)
+- **Claude Desktop**, **OpenCode** (latest version)
 - MCP Protocol (v1.0) implementation
 
 ---
@@ -67,8 +67,8 @@ Edit `config/windows.json`, `config/macos.json`, `config/default.json` to define
 windows.json
 {
   "allowed_paths": [
-    "C:\\Users\\username\\Desktop",
-    "C:\\Users\\username\\Downloads"
+    "~/Desktop",
+    "~/Downloads"
   ],
   "max_file_size": "20MB",
   "allowed_extensions": [
@@ -81,8 +81,8 @@ windows.json
 macos.json
 {
   "allowed_paths": [
-    "/Users/username/Desktop",
-    "/Users/username/Downloads"
+    "~/Desktop",
+    "~/Downloads"
   ],
   "max_file_size": "20MB",
   "allowed_extensions": [
@@ -104,7 +104,7 @@ default.json
 }
 ```
 
-Configure Claude Desktop as follows:
+### Configure Claude Desktop as follows:
 
 ```json
 {
@@ -123,6 +123,31 @@ Configure Claude Desktop as follows:
   }
 }
 ```
+
+### Configure OpenCode as follows:
+
+> Find your OpenCode global ".config" directory and open the "opencode.jsonc" file with your favorite IDE
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "filesystem_mcp_server": {
+      "type": "local",
+      "enabled": true,
+      "command": [
+        "C:\\Users\\username\\.local\\bin\\uv.exe",
+        "run",
+        "--project",
+        "C:\\Users\\username\\Documents\\filesystem_mcp_server",
+        "python",
+        "C:\\Users\\username\\Documents\\filesystem_mcp_server\\src\\main.py"
+      ]
+    }
+  }
+}
+```
+
 
 ---
 
