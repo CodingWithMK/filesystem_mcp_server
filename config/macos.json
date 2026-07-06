@@ -5,7 +5,9 @@
   ],
   "max_file_size": "20MB",
   "allowed_extensions": [
-    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx", "mp4", "mp3", "wav", "avi", "mov", "zip", "rar"
+    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt",
+    "pptx", "xls", "xlsx", "mp4", "mp3", "wav", "avi", "mov", "zip", "rar",
+    "pkg", "dmg", "dll", "py", "c", "cpp", "java", "js", "html", "css", "xml", "csv", "ts"
   ]
 }
   
