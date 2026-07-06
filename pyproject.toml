@@ -1,9 +1,10 @@
 [project]
 name = "filesystem-mcp-server"
 version = "0.1.0"
-description = "Add your description here"
+description = "Thread-safe and asynchronous local filesystem organizer MCP server"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mcp[cli]>=1.10.1",
+    "send2trash>=2.1.0",
 ]
