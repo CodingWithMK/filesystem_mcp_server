@@ -1,6 +1,6 @@
 # 🗂️ Python MCP Filesystem Server
 
-This project is a Python-based MCP (Model Context Protocol) server that allows Claude Desktop to perform secure and controlled local filesystem operations via natural language commands. It bridges the gap between conversational AI and direct file management by implementing the MCP 1.0 protocol with full support for read/write operations, file system traversal, metadata extraction, and more.
+This project is a Python-based MCP (Model Context Protocol) server that allows Claude Desktop, OpenCode and Antigravity CLI to perform secure and controlled local filesystem operations via natural language commands. It bridges the gap between conversational AI and direct file management by implementing the MCP 1.0 protocol with full support for read/write operations, file system traversal, metadata extraction, and more.
 
 ---
 
@@ -19,7 +19,7 @@ This project is a Python-based MCP (Model Context Protocol) server that allows C
 
 - **Python** 3.11
 - **AsyncIO**, **Pathlib**, **JSON**, **Typing**
-- **Claude Desktop**, **OpenCode** (latest version)
+- **Claude Desktop**, **OpenCode**, **Antigravity CLI** (latest version)
 - MCP Protocol (v1.0) implementation
 
 ---
@@ -148,6 +148,28 @@ default.json
 }
 ```
 
+### Configure OpenCode as follows:
+
+> Find your Antigravity CLI global standalone MCP Configuration file under ".gemini"->"config"->"mcp_config.json" and paste following mcp schema and adjust it to your system:
+
+```json
+{
+    "mcpServers": {
+        "filesystem-mcp-server": {
+            "command": "C:\\Users\\username\\.local\\bin\\uv.exe",
+            "args": [
+                "run",
+                "--project",
+                "C:\\Users\\username\\Documents\\filesystem_mcp_server",
+                "python",
+                "C:\\Users\\username\\Documents\\filesystem_mcp_server\\src\\main.py"
+            ],
+            "env": {}
+        }
+    }
+}
+```
+
 
 ---
 
@@ -178,7 +200,7 @@ Includes unit tests for:
 
 ## 🧯 Known Issue
 
-We encountered a **server startup failure** caused by Claude Desktop not correctly spawning the Python subprocess for MCP communication. This is likely due to how Claude resolves binary paths, especially on Windows or when the virtual environment is not activated globally.
+We encountered a **Cool Tooling** issue due to agent/model capabilities and currently not supporting file types. Adjust the config policies for more file type support to solve the file type support problem.
 
 ### Temporary Workaround:
 
