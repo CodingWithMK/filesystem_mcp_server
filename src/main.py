@@ -15,12 +15,22 @@ from send2trash import send2trash
 
 from mcp.server.fastmcp import FastMCP
 from utils.config import load_config
+from boundaryattest import (
+    BoundaryAttestor,
+    append_attestation_result,
+    hash_file,
+    logical_target_ref,
+    materialized_action_hash,
+    new_claim,
+    sha256_bytes,
+)
 
 # 1. Load Configuration
 config = load_config()
 ALLOWED_PATHS: List[Path] = [Path(p).expanduser().resolve() for p in config.get("allowed_paths", [])]
 MAX_FILE_SIZE: int = config.get("max_file_size", 20 * 1024 * 1024)
 ALLOWED_EXTENSIONS: Set[str] = config.get("allowed_extensions", set())
+BOUNDARY_ATTESTOR = BoundaryAttestor.from_env()
 
 # 2. Thread-Safety Mechanisms
 PATH_LOCKS = defaultdict(asyncio.Lock)
@@ -176,12 +186,43 @@ async def write_file(path: str, content: str) -> str:
 
     async with PATH_LOCKS[str(target)]:
         def _write():
+            pre_operation_size = (
+                target.stat().st_size
+                if BOUNDARY_ATTESTOR.enabled and target.is_file()
+                else 0
+            )
+            pre_operation_hash = (
+                hash_file(target) if BOUNDARY_ATTESTOR.enabled and target.is_file() else None
+            )
             target.parent.mkdir(parents=True, exist_ok=True)
             with open(target, "a+", encoding="utf-8") as f:
                 f.write(content)
-                
-        await asyncio.to_thread(_write)
-    return f"Successfully committed content to {target}"
+            success = f"Successfully committed content to {target}"
+
+            def _claim():
+                with target.open("rb") as artifact:
+                    artifact.seek(pre_operation_size)
+                    appended_bytes_hash = sha256_bytes(artifact.read())
+                artifact_hash = hash_file(target)
+                return new_claim(
+                    "mcp.filesystem.write_file",
+                    logical_target_ref(target, ALLOWED_PATHS),
+                    artifact_hash=artifact_hash,
+                    input_hash=appended_bytes_hash,
+                    output_hash=artifact_hash,
+                    pre_operation_hash=pre_operation_hash,
+                    operation_semantics="append_utf8_text",
+                    materialized_action_hash=materialized_action_hash({
+                        "action_type": "mcp.filesystem.write_file",
+                        "resolved_target": str(target),
+                        "appended_bytes_hash": appended_bytes_hash,
+                        "operation_semantics": "append_utf8_text",
+                    }),
+                )
+
+            return append_attestation_result(success, BOUNDARY_ATTESTOR, _claim)
+
+        return await asyncio.to_thread(_write)
 
 @mcp.tool()
 async def create_directory(path: str) -> str:
@@ -214,10 +255,30 @@ async def delete_file(path: str) -> str:
         def _trash_file():
             if not target.is_file():
                 raise FileNotFoundError(f"'{target}' does not exist or is not a file reference.")
+            pre_delete_hash = hash_file(target) if BOUNDARY_ATTESTOR.enabled else None
             send2trash(str(target))
-            
-        await asyncio.to_thread(_trash_file)
-    return f"Successfully dispatched file {target} to environment recycling bin."
+            success = f"Successfully dispatched file {target} to environment recycling bin."
+
+            def _claim():
+                return new_claim(
+                    "mcp.filesystem.delete_file",
+                    logical_target_ref(target, ALLOWED_PATHS),
+                    artifact_hash=pre_delete_hash,
+                    input_hash=pre_delete_hash,
+                    output_hash=None,
+                    deleted_artifact_hash=pre_delete_hash,
+                    operation_semantics="send_to_trash",
+                    materialized_action_hash=materialized_action_hash({
+                        "action_type": "mcp.filesystem.delete_file",
+                        "resolved_target": str(target),
+                        "deleted_artifact_hash": pre_delete_hash,
+                        "operation_semantics": "send_to_trash",
+                    }),
+                )
+
+            return append_attestation_result(success, BOUNDARY_ATTESTOR, _claim)
+
+        return await asyncio.to_thread(_trash_file)
 
 @mcp.tool()
 async def delete_directory(path: str) -> str:
@@ -260,10 +321,34 @@ async def move_file(source: str, destination: str) -> str:
             if not src.is_file():
                 raise FileNotFoundError(f"Source object '{src}' is missing or invalid.")
             final_dest = dest / src.name if dest.is_dir() else dest
+            source_hash = hash_file(src) if BOUNDARY_ATTESTOR.enabled else None
             shutil.move(str(src), str(final_dest))
-        await asyncio.to_thread(_move)
+            if not BOUNDARY_ATTESTOR.enabled:
+                return f"Successfully moved '{src}' to '{dest}' coordinates."
+            success = f"Successfully moved '{src}' to '{final_dest}' coordinates."
 
-    return f"Successfully moved '{src}' to '{dest}' coordinates."
+            def _claim():
+                destination_hash = hash_file(final_dest)
+                return new_claim(
+                    "mcp.filesystem.move_file",
+                    logical_target_ref(final_dest, ALLOWED_PATHS),
+                    artifact_hash=destination_hash,
+                    input_hash=source_hash,
+                    output_hash=destination_hash,
+                    source_ref=logical_target_ref(src, ALLOWED_PATHS),
+                    source_artifact_hash=source_hash,
+                    operation_semantics="move",
+                    materialized_action_hash=materialized_action_hash({
+                        "action_type": "mcp.filesystem.move_file",
+                        "resolved_source": str(src),
+                        "resolved_final_destination": str(final_dest),
+                        "operation_semantics": "move",
+                    }),
+                )
+
+            return append_attestation_result(success, BOUNDARY_ATTESTOR, _claim)
+
+        return await asyncio.to_thread(_move)
 
 @mcp.tool()
 async def move_directory(source: str, destination: str) -> str:
