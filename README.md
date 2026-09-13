@@ -148,7 +148,7 @@ default.json
 }
 ```
 
-### Configure OpenCode as follows:
+### Configure Antigravity CLI as follows:
 
 > Find your Antigravity CLI global standalone MCP Configuration file under ".gemini"->"config"->"mcp_config.json" and paste following mcp schema and adjust it to your system:
 
