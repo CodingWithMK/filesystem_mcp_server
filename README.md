@@ -196,6 +196,59 @@ Includes unit tests for:
 * Server error handling
 * Config parsing
 
+### Experimental BoundaryAttest receipts
+
+The server can optionally emit portable, Ed25519-signed BoundaryAttest Interop
+Profile v0.1 receipts after successful `write_file`, `move_file`, and
+`delete_file` operations. This proof of concept is off by default: ordinary
+single-user/local MCP deployments generally get sufficient visibility from
+their existing MCP and local logs, without signing-key or receipt-storage
+overhead. The feature is aimed at shared, multi-tenant, enterprise, CI/CD, and
+other trust-boundary environments where portable evidence may be useful.
+
+Install the optional dependency and configure the server process:
+
+```bash
+uv sync --extra boundaryattest
+export BOUNDARYATTEST_ENABLED=true
+export BOUNDARYATTEST_PRIVATE_KEY=/secure/path/ed25519-private-key.pem
+export BOUNDARYATTEST_RECEIPT_DIR=/secure/path/filesystem-receipts
+```
+
+For development only, generate an Ed25519 PKCS #8 key (never commit it):
+
+```bash
+openssl genpkey -algorithm Ed25519 -out boundaryattest-dev-private.pem
+openssl pkey -in boundaryattest-dev-private.pem -pubout -out boundaryattest-dev-public.pem
+```
+
+Each successful covered operation writes one uniquely named JSON receipt. Clear
+path references are relative to the matching configured allowed root, while the
+signed `materialized_action_hash` binds the exact resolved internal path(s).
+Writes bind the appended UTF-8 content digest plus exact pre/post file hashes;
+moves bind the source and actual final destination (including an appended source
+name when the destination argument is a directory); deletes bind the exact
+pre-trash bytes and have no post-delete artifact at the original path. File
+hashes are SHA-256 over raw bytes.
+
+Verify with a public key obtained through a trusted path, optionally checking a
+current artifact's exact bytes:
+
+```bash
+uv run --extra boundaryattest python src/verify_boundaryattest_receipt.py \
+  RECEIPT.json EXPECTED_PUBLIC_KEY.pem --artifact FILE
+```
+
+A valid result proves only that the expected key signed the unchanged claim and,
+when supplied, that the artifact bytes match the signed digest. It does not
+prove truth, wisdom, authorization, policy compliance, signer trustworthiness,
+runtime integrity, or production-grade key custody. The feature is experimental,
+non-transactional, and external to the MCP server: if an action succeeds but
+receipt emission fails, the action is not rolled back and the tool returns its
+success message with a prominent attestation warning. This invited test
+integration is not an endorsement, partnership, audit system, security
+guarantee, or production key-management system.
+
 ---
 
 ## 🧯 Known Issue
