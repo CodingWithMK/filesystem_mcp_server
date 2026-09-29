@@ -100,6 +100,8 @@ def test_write_receipt_exact_bytes_and_tamper(server, tmp_path, monkeypatch):
     assert receipt["claim"]["pre_operation_hash"] == boundaryattest.sha256_bytes(b"before\n")
     assert receipt["claim"]["artifact_hash"] == boundaryattest.sha256_bytes(b"before\nafter\r\n")
     assert receipt["claim"]["input_hash"] == boundaryattest.sha256_bytes(b"after\r\n")
+    assert receipt["claim"]["output_hash"] == receipt["claim"]["artifact_hash"]
+    assert receipt["claim"]["operation_semantics"] == "append_utf8_text"
     assert boundaryattest.verify_receipt(receipt_path.read_text(), public_pem, target) == {
         "ok": True,
         "artifact_ok": True,
@@ -123,6 +125,11 @@ def test_move_binds_materialized_directory_destination(server, tmp_path, monkeyp
     receipt_path, receipt = only_receipt(receipt_dir)
     assert receipt["claim"]["target_ref"] == "allowed_root_0:destination/source.txt"
     assert receipt["claim"]["artifact_hash"] == boundaryattest.sha256_bytes(b"move bytes")
+    assert receipt["claim"]["source_artifact_hash"] == boundaryattest.sha256_bytes(
+        b"move bytes"
+    )
+    assert receipt["claim"]["output_hash"] == receipt["claim"]["artifact_hash"]
+    assert receipt["claim"]["operation_semantics"] == "move"
     assert boundaryattest.verify_receipt(receipt_path.read_text(), public_pem, final_destination)["ok"]
     directory_argument_digest = boundaryattest.materialized_action_hash({
         "action_type": "mcp.filesystem.move_file",
@@ -149,7 +156,43 @@ def test_delete_binds_pre_delete_bytes_without_real_trash(server, tmp_path, monk
     assert receipt["claim"]["artifact_hash"] == expected
     assert receipt["claim"]["deleted_artifact_hash"] == expected
     assert receipt["claim"]["output_hash"] is None
+    assert receipt["claim"]["operation_semantics"] == "send_to_trash"
     assert boundaryattest.verify_receipt(receipt_path.read_text(), public_pem)["ok"]
+
+
+def test_attestation_wrappers_run_inside_operation_locks(server, tmp_path, monkeypatch):
+    observed = []
+
+    def write_wrapper(attestor, target, allowed_paths, operation):
+        observed.append(("write", server.PATH_LOCKS[str(target)].locked()))
+        return operation()
+
+    def move_wrapper(attestor, source, final_destination, allowed_paths, operation):
+        observed.append((
+            "move",
+            server.PATH_LOCKS[str(source)].locked()
+            and server.PATH_LOCKS[str(tmp_path / "destination")].locked(),
+        ))
+        return operation()
+
+    def delete_wrapper(attestor, target, allowed_paths, operation):
+        observed.append(("delete", server.PATH_LOCKS[str(target)].locked()))
+        return operation()
+
+    monkeypatch.setattr(server, "attest_write_file", write_wrapper)
+    monkeypatch.setattr(server, "attest_move_file", move_wrapper)
+    monkeypatch.setattr(server, "attest_delete_file", delete_wrapper)
+    monkeypatch.setattr(server, "send2trash", lambda path: Path(path).unlink())
+
+    source = tmp_path / "locked.txt"
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    asyncio.run(server.write_file(str(source), "locked"))
+    moved = destination / source.name
+    asyncio.run(server.move_file(str(source), str(destination)))
+    asyncio.run(server.delete_file(str(moved)))
+
+    assert observed == [("write", True), ("move", True), ("delete", True)]
 
 
 def test_signed_claim_tampering_fails(server, tmp_path, monkeypatch):
