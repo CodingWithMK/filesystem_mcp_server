@@ -15,6 +15,7 @@ import sys
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -214,111 +215,134 @@ def append_attestation_result(
         return f"{success} WARNING: {warning}"
 
 
-def attest_write_file(
+def attest_write(
     attestor: BoundaryAttestor,
     target: Path,
     allowed_paths: Sequence[Path],
-    operation: Callable[[], str],
-) -> str:
-    """Capture write evidence around an append operation run by the server."""
-    if not attestor.enabled:
-        return operation()
+) -> Callable[[Callable[..., str]], Callable[..., str]]:
+    """Decorate an append worker with exact pre/post write evidence."""
+    def decorator(operation: Callable[..., str]) -> Callable[..., str]:
+        @wraps(operation)
+        def wrapped(*args: Any, **kwargs: Any) -> str:
+            if not attestor.enabled:
+                return operation(*args, **kwargs)
 
-    pre_operation_size = target.stat().st_size if target.is_file() else 0
-    pre_operation_hash = hash_file(target) if target.is_file() else None
-    success = operation()
+            target_existed = target.is_file()
+            pre_operation_size = target.stat().st_size if target_existed else 0
+            pre_operation_hash = hash_file(target) if target_existed else None
+            success = operation(*args, **kwargs)
 
-    def claim() -> dict[str, Any]:
-        with target.open("rb") as artifact:
-            artifact.seek(pre_operation_size)
-            appended_bytes_hash = sha256_bytes(artifact.read())
-        artifact_hash = hash_file(target)
-        return new_claim(
-            "mcp.filesystem.write_file",
-            logical_target_ref(target, allowed_paths),
-            artifact_hash=artifact_hash,
-            input_hash=appended_bytes_hash,
-            output_hash=artifact_hash,
-            pre_operation_hash=pre_operation_hash,
-            operation_semantics="append_utf8_text",
-            materialized_action_hash=materialized_action_hash({
-                "action_type": "mcp.filesystem.write_file",
-                "resolved_target": str(target),
-                "appended_bytes_hash": appended_bytes_hash,
-                "operation_semantics": "append_utf8_text",
-            }),
-        )
+            def claim() -> dict[str, Any]:
+                with target.open("rb") as artifact:
+                    artifact.seek(pre_operation_size)
+                    appended_bytes_hash = sha256_bytes(artifact.read())
+                artifact_hash = hash_file(target)
+                return new_claim(
+                    "mcp.filesystem.write_file",
+                    logical_target_ref(target, allowed_paths),
+                    artifact_hash=artifact_hash,
+                    input_hash=appended_bytes_hash,
+                    output_hash=artifact_hash,
+                    pre_operation_hash=pre_operation_hash,
+                    operation_semantics="append_utf8_text",
+                    materialized_action_hash=materialized_action_hash({
+                        "action_type": "mcp.filesystem.write_file",
+                        "resolved_target": str(target),
+                        "appended_bytes_hash": appended_bytes_hash,
+                        "operation_semantics": "append_utf8_text",
+                    }),
+                )
 
-    return append_attestation_result(success, attestor, claim)
+            return append_attestation_result(success, attestor, claim)
+
+        return wrapped
+
+    return decorator
 
 
-def attest_delete_file(
+def attest_delete(
     attestor: BoundaryAttestor,
     target: Path,
     allowed_paths: Sequence[Path],
-    operation: Callable[[], str],
-) -> str:
-    """Capture the exact file evidence before a send-to-trash operation."""
-    if not attestor.enabled:
-        return operation()
+) -> Callable[[Callable[..., str]], Callable[..., str]]:
+    """Decorate a delete worker with exact pre-delete evidence."""
+    def decorator(operation: Callable[..., str]) -> Callable[..., str]:
+        @wraps(operation)
+        def wrapped(*args: Any, **kwargs: Any) -> str:
+            if not attestor.enabled:
+                return operation(*args, **kwargs)
+            if not target.is_file():
+                return operation(*args, **kwargs)
 
-    pre_delete_hash = hash_file(target)
-    success = operation()
+            pre_delete_hash = hash_file(target)
+            success = operation(*args, **kwargs)
 
-    def claim() -> dict[str, Any]:
-        return new_claim(
-            "mcp.filesystem.delete_file",
-            logical_target_ref(target, allowed_paths),
-            artifact_hash=pre_delete_hash,
-            input_hash=pre_delete_hash,
-            output_hash=None,
-            deleted_artifact_hash=pre_delete_hash,
-            operation_semantics="send_to_trash",
-            materialized_action_hash=materialized_action_hash({
-                "action_type": "mcp.filesystem.delete_file",
-                "resolved_target": str(target),
-                "deleted_artifact_hash": pre_delete_hash,
-                "operation_semantics": "send_to_trash",
-            }),
-        )
+            def claim() -> dict[str, Any]:
+                return new_claim(
+                    "mcp.filesystem.delete_file",
+                    logical_target_ref(target, allowed_paths),
+                    artifact_hash=pre_delete_hash,
+                    input_hash=pre_delete_hash,
+                    output_hash=None,
+                    deleted_artifact_hash=pre_delete_hash,
+                    operation_semantics="send_to_trash",
+                    materialized_action_hash=materialized_action_hash({
+                        "action_type": "mcp.filesystem.delete_file",
+                        "resolved_target": str(target),
+                        "deleted_artifact_hash": pre_delete_hash,
+                        "operation_semantics": "send_to_trash",
+                    }),
+                )
 
-    return append_attestation_result(success, attestor, claim)
+            return append_attestation_result(success, attestor, claim)
+
+        return wrapped
+
+    return decorator
 
 
-def attest_move_file(
+def attest_move(
     attestor: BoundaryAttestor,
     source: Path,
     final_destination: Path,
     allowed_paths: Sequence[Path],
-    operation: Callable[[], str],
-) -> str:
-    """Capture source and destination evidence around a file move."""
-    if not attestor.enabled:
-        return operation()
+) -> Callable[[Callable[..., str]], Callable[..., str]]:
+    """Decorate a move worker with source and materialized-destination evidence."""
+    def decorator(operation: Callable[..., str]) -> Callable[..., str]:
+        @wraps(operation)
+        def wrapped(*args: Any, **kwargs: Any) -> str:
+            if not attestor.enabled:
+                return operation(*args, **kwargs)
+            if not source.is_file():
+                return operation(*args, **kwargs)
 
-    source_hash = hash_file(source)
-    success = operation()
+            source_hash = hash_file(source)
+            success = operation(*args, **kwargs)
 
-    def claim() -> dict[str, Any]:
-        destination_hash = hash_file(final_destination)
-        return new_claim(
-            "mcp.filesystem.move_file",
-            logical_target_ref(final_destination, allowed_paths),
-            artifact_hash=destination_hash,
-            input_hash=source_hash,
-            output_hash=destination_hash,
-            source_ref=logical_target_ref(source, allowed_paths),
-            source_artifact_hash=source_hash,
-            operation_semantics="move",
-            materialized_action_hash=materialized_action_hash({
-                "action_type": "mcp.filesystem.move_file",
-                "resolved_source": str(source),
-                "resolved_final_destination": str(final_destination),
-                "operation_semantics": "move",
-            }),
-        )
+            def claim() -> dict[str, Any]:
+                destination_hash = hash_file(final_destination)
+                return new_claim(
+                    "mcp.filesystem.move_file",
+                    logical_target_ref(final_destination, allowed_paths),
+                    artifact_hash=destination_hash,
+                    input_hash=source_hash,
+                    output_hash=destination_hash,
+                    source_ref=logical_target_ref(source, allowed_paths),
+                    source_artifact_hash=source_hash,
+                    operation_semantics="move",
+                    materialized_action_hash=materialized_action_hash({
+                        "action_type": "mcp.filesystem.move_file",
+                        "resolved_source": str(source),
+                        "resolved_final_destination": str(final_destination),
+                        "operation_semantics": "move",
+                    }),
+                )
 
-    return append_attestation_result(success, attestor, claim)
+            return append_attestation_result(success, attestor, claim)
+
+        return wrapped
+
+    return decorator
 
 
 def verify_receipt(

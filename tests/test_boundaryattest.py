@@ -91,11 +91,37 @@ def test_disabled_preserves_write_and_creates_no_receipt(server, tmp_path):
     assert not (tmp_path / "receipts").exists()
 
 
+def test_disabled_decorators_bypass_hashing_and_signing(server, tmp_path, monkeypatch):
+    target = tmp_path / "fast-path.txt"
+    destination = tmp_path / "fast-path-destination"
+    destination.mkdir()
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("disabled attestation performed evidence or signing work")
+
+    monkeypatch.setattr(boundaryattest, "hash_file", unexpected)
+    monkeypatch.setattr(boundaryattest.BoundaryAttestor, "emit", unexpected)
+    monkeypatch.setattr(server, "send2trash", lambda path: Path(path).unlink())
+
+    write_result = asyncio.run(server.write_file(str(target), "fast"))
+    move_result = asyncio.run(server.move_file(str(target), str(destination)))
+    moved = destination / target.name
+    delete_result = asyncio.run(server.delete_file(str(moved)))
+
+    assert write_result == f"Successfully committed content to {target}"
+    assert move_result == f"Successfully moved '{target}' to '{destination}' coordinates."
+    assert delete_result == (
+        f"Successfully dispatched file {moved} to environment recycling bin."
+    )
+    assert not moved.exists()
+
+
 def test_write_receipt_exact_bytes_and_tamper(server, tmp_path, monkeypatch):
     receipt_dir, public_pem = enable(server, tmp_path, monkeypatch)
     target = tmp_path / "written.txt"
     target.write_bytes(b"before\n")
-    asyncio.run(server.write_file(str(target), "after\r\n"))
+    result = asyncio.run(server.write_file(str(target), "after\r\n"))
+    assert result.startswith(f"Successfully committed content to {target} BoundaryAttest receipt:")
     receipt_path, receipt = only_receipt(receipt_dir)
     assert receipt["claim"]["pre_operation_hash"] == boundaryattest.sha256_bytes(b"before\n")
     assert receipt["claim"]["artifact_hash"] == boundaryattest.sha256_bytes(b"before\nafter\r\n")
@@ -120,7 +146,10 @@ def test_move_binds_materialized_directory_destination(server, tmp_path, monkeyp
     destination_dir = tmp_path / "destination"
     destination_dir.mkdir()
     source.write_bytes(b"move bytes")
-    asyncio.run(server.move_file(str(source), str(destination_dir)))
+    result = asyncio.run(server.move_file(str(source), str(destination_dir)))
+    assert result.startswith(
+        f"Successfully moved '{source}' to '{destination_dir}' coordinates. BoundaryAttest receipt:"
+    )
     final_destination = destination_dir / source.name
     receipt_path, receipt = only_receipt(receipt_dir)
     assert receipt["claim"]["target_ref"] == "allowed_root_0:destination/source.txt"
@@ -149,7 +178,10 @@ def test_delete_binds_pre_delete_bytes_without_real_trash(server, tmp_path, monk
         Path(path).unlink()
 
     monkeypatch.setattr(server, "send2trash", fake_trash)
-    asyncio.run(server.delete_file(str(target)))
+    result = asyncio.run(server.delete_file(str(target)))
+    assert result.startswith(
+        f"Successfully dispatched file {target} to environment recycling bin. BoundaryAttest receipt:"
+    )
     receipt_path, receipt = only_receipt(receipt_dir)
     expected = boundaryattest.sha256_bytes(b"delete me\x00")
     assert not target.exists()
@@ -163,25 +195,37 @@ def test_delete_binds_pre_delete_bytes_without_real_trash(server, tmp_path, monk
 def test_attestation_wrappers_run_inside_operation_locks(server, tmp_path, monkeypatch):
     observed = []
 
-    def write_wrapper(attestor, target, allowed_paths, operation):
-        observed.append(("write", server.PATH_LOCKS[str(target)].locked()))
-        return operation()
+    def write_decorator(attestor, target, allowed_paths):
+        def decorate(operation):
+            def wrapped():
+                observed.append(("write", server.PATH_LOCKS[str(target)].locked()))
+                return operation()
+            return wrapped
+        return decorate
 
-    def move_wrapper(attestor, source, final_destination, allowed_paths, operation):
-        observed.append((
-            "move",
-            server.PATH_LOCKS[str(source)].locked()
-            and server.PATH_LOCKS[str(tmp_path / "destination")].locked(),
-        ))
-        return operation()
+    def move_decorator(attestor, source, final_destination, allowed_paths):
+        def decorate(operation):
+            def wrapped():
+                observed.append((
+                    "move",
+                    server.PATH_LOCKS[str(source)].locked()
+                    and server.PATH_LOCKS[str(tmp_path / "destination")].locked(),
+                ))
+                return operation()
+            return wrapped
+        return decorate
 
-    def delete_wrapper(attestor, target, allowed_paths, operation):
-        observed.append(("delete", server.PATH_LOCKS[str(target)].locked()))
-        return operation()
+    def delete_decorator(attestor, target, allowed_paths):
+        def decorate(operation):
+            def wrapped():
+                observed.append(("delete", server.PATH_LOCKS[str(target)].locked()))
+                return operation()
+            return wrapped
+        return decorate
 
-    monkeypatch.setattr(server, "attest_write_file", write_wrapper)
-    monkeypatch.setattr(server, "attest_move_file", move_wrapper)
-    monkeypatch.setattr(server, "attest_delete_file", delete_wrapper)
+    monkeypatch.setattr(server, "attest_write", write_decorator)
+    monkeypatch.setattr(server, "attest_move", move_decorator)
+    monkeypatch.setattr(server, "attest_delete", delete_decorator)
     monkeypatch.setattr(server, "send2trash", lambda path: Path(path).unlink())
 
     source = tmp_path / "locked.txt"
