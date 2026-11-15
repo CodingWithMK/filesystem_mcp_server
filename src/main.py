@@ -15,12 +15,19 @@ from send2trash import send2trash
 
 from mcp.server.fastmcp import FastMCP
 from utils.config import load_config
+from boundaryattest import (
+    BoundaryAttestor,
+    attest_delete,
+    attest_move,
+    attest_write,
+)
 
 # 1. Load Configuration
 config = load_config()
 ALLOWED_PATHS: List[Path] = [Path(p).expanduser().resolve() for p in config.get("allowed_paths", [])]
 MAX_FILE_SIZE: int = config.get("max_file_size", 20 * 1024 * 1024)
 ALLOWED_EXTENSIONS: Set[str] = config.get("allowed_extensions", set())
+BOUNDARY_ATTESTOR = BoundaryAttestor.from_env()
 
 # 2. Thread-Safety Mechanisms
 PATH_LOCKS = defaultdict(asyncio.Lock)
@@ -153,7 +160,7 @@ async def read_file(path: str) -> str:
                 raise FileNotFoundError(f"'{target}' is not a file or does not exist.")
             if target.stat().st_size > MAX_FILE_SIZE:
                 raise ValueError("Target file size exceeds the configured max_file_size barrier.")
-            with open(target, "r", encoding="utf-8") as f:
+            with open(target, "r", encoding="utf-8", newline="") as f:
                 return f.read()
                 
         content = await asyncio.to_thread(_read)
@@ -175,13 +182,14 @@ async def write_file(path: str, content: str) -> str:
         raise ValueError("Payload capacity violates configured max_file_size restrictions.")
 
     async with PATH_LOCKS[str(target)]:
+        @attest_write(BOUNDARY_ATTESTOR, target, ALLOWED_PATHS)
         def _write():
             target.parent.mkdir(parents=True, exist_ok=True)
-            with open(target, "a+", encoding="utf-8") as f:
+            with open(target, "a+", encoding="utf-8", newline="") as f:
                 f.write(content)
-                
-        await asyncio.to_thread(_write)
-    return f"Successfully committed content to {target}"
+            return f"Successfully committed content to {target}"
+
+        return await asyncio.to_thread(_write)
 
 @mcp.tool()
 async def create_directory(path: str) -> str:
@@ -211,13 +219,14 @@ async def delete_file(path: str) -> str:
     target = validate_path(path)
     
     async with PATH_LOCKS[str(target)]:
+        @attest_delete(BOUNDARY_ATTESTOR, target, ALLOWED_PATHS)
         def _trash_file():
             if not target.is_file():
                 raise FileNotFoundError(f"'{target}' does not exist or is not a file reference.")
             send2trash(str(target))
-            
-        await asyncio.to_thread(_trash_file)
-    return f"Successfully dispatched file {target} to environment recycling bin."
+            return f"Successfully dispatched file {target} to environment recycling bin."
+
+        return await asyncio.to_thread(_trash_file)
 
 @mcp.tool()
 async def delete_directory(path: str) -> str:
@@ -256,14 +265,16 @@ async def move_file(source: str, destination: str) -> str:
         validate_file_policy(dest / src.name)
 
     async with acquire_deterministic_locks(src, dest):
+        final_dest = dest / src.name if dest.is_dir() else dest
+
+        @attest_move(BOUNDARY_ATTESTOR, src, final_dest, ALLOWED_PATHS)
         def _move():
             if not src.is_file():
                 raise FileNotFoundError(f"Source object '{src}' is missing or invalid.")
-            final_dest = dest / src.name if dest.is_dir() else dest
             shutil.move(str(src), str(final_dest))
-        await asyncio.to_thread(_move)
+            return f"Successfully moved '{src}' to '{dest}' coordinates."
 
-    return f"Successfully moved '{src}' to '{dest}' coordinates."
+        return await asyncio.to_thread(_move)
 
 @mcp.tool()
 async def move_directory(source: str, destination: str) -> str:
