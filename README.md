@@ -1,70 +1,81 @@
 # 🗂️ Python MCP Filesystem Server
 
-This project is a Python-based MCP (Model Context Protocol) server that allows Claude Desktop, OpenCode and Antigravity CLI to perform secure and controlled local filesystem operations via natural language commands. It bridges the gap between conversational AI and direct file management by implementing the MCP 1.0 protocol with full support for read/write operations, file system traversal, metadata extraction, and more.
+This project is a Python-based MCP (Model Context Protocol) server that allows Claude Desktop, OpenCode, and Antigravity CLI to perform secure and controlled local filesystem operations via natural language commands. It bridges the gap between conversational AI and direct file management by implementing the MCP 1.0 protocol with full support for read/write operations, file system traversal, metadata extraction, and optional cryptographic operation receipts.
 
 ---
 
 ## 🚀 Features
 
-- ✅ Fully compatible with Claude Desktop
-- 📂 Read, write, move, delete, and search files
-- 🔒 Thread-sade deterministic locking, stric path validation & permission control
-- 🧠 JSON-RPC 2.0 communication over stdin/stdout
+- ✅ Fully compatible with Claude Desktop, OpenCode, and Antigravity CLI
+- 📂 Read, write, move, copy, delete, and search files and directories
+- 🔒 Thread-safe deterministic locking, strict path validation & extension policy enforcement
+- 🧠 JSON-RPC 2.0 communication over `stdin`/`stdout`
 - 🔄 Asynchronous architecture with `asyncio`
+- 🧾 Optional Ed25519-signed BoundaryAttest receipts for high-impact file operations
 - 🧪 Unit & integration tests included
 
 ---
 
 ## 🧰 Tech Stack
 
-- **Python** 3.11
+- **Python** >= 3.11
+- **MCP SDK** (`mcp[cli] >= 1.10.1`), **send2trash**
 - **AsyncIO**, **Pathlib**, **JSON**, **Typing**
-- **Claude Desktop**, **OpenCode**, **Antigravity CLI** (latest version)
+- **Claude Desktop**, **OpenCode**, **Antigravity CLI**
 - MCP Protocol (v1.0) implementation
 
 ---
 
 ## 📦 Installation
 
-### Install `uv` (recommended)
+### 1. Install `uv` (recommended)
 
 On **Windows PowerShell**:
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm [https://astral.sh/uv/install.ps1](https://astral.sh/uv/install.ps1) | iex"
 ```
 
-On **Linux/Mac**:
-```
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-or if your system does not have ```curl```, try with ```wget```
-```
-wget -qO- https://astral.sh/uv/install.sh | sh
-```
-or install by requesting a specific version
-```
-curl -LsSf https://astral.sh/uv/0.7.20/install.sh | sh
-```
-
-> Make sure uv is available in your system PATH.
+On **Linux / macOS**:
 
 ```bash
-git clone https://github.com/yourusername/python-mcp-filesystem-server.git
-cd python-mcp-filesystem-server
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-````
+curl -LsSf [https://astral.sh/uv/install.sh](https://astral.sh/uv/install.sh) | sh
+```
+
+Or if your system does not have `curl`, use `wget`:
+
+```bash
+wget -qO- [https://astral.sh/uv/install.sh](https://astral.sh/uv/install.sh) | sh
+```
+
+> Make sure `uv` is available in your system `PATH`.
+
+### 2. Clone & Sync Dependencies
+
+```bash
+git clone [https://github.com/CodingWithMK/filesystem_mcp_server.git](https://github.com/CodingWithMK/filesystem_mcp_server.git)
+cd filesystem_mcp_server
+uv sync
+```
+
+To install optional dependencies for testing or BoundaryAttest receipts:
+
+```bash
+# Install test dependencies (pytest, cryptography)
+uv sync --extra test
+
+# Install optional BoundaryAttest receipt signing dependency (cryptography)
+uv sync --extra boundaryattest
+```
 
 ---
 
 ## ⚙️ Configuration
 
-Edit `config/windows.json`, `config/macos.json`, `config/default.json` to define allowed paths and other settings:
+Edit `config/windows.json`, `config/macos.json`, or `config/default.json` to define allowed paths, maximum file size, and allowed file extensions:
 
+**`config/windows.json`**
 ```json
-windows.json
 {
   "allowed_paths": [
     "~/Desktop",
@@ -72,13 +83,16 @@ windows.json
   ],
   "max_file_size": "20MB",
   "allowed_extensions": [
-    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
+    "txt", "md", "pdf", "png", "jpg", "jpeg", "json", "docx", "doc", "ppt",
+    "pptx", "xls", "xlsx", "mp4", "mp3", "wav", "avi", "mov", "zip", "rar",
+    "msi", "exe", "dll", "py", "c", "cpp", "java", "js", "html", "css", "xml", "csv", "ts",
+    "CATPart", "CATProduct", "CATDrawing", "CATProcess"
   ]
 }
 ```
 
+**`config/macos.json`**
 ```json
-macos.json
 {
   "allowed_paths": [
     "~/Desktop",
@@ -86,12 +100,15 @@ macos.json
   ],
   "max_file_size": "20MB",
   "allowed_extensions": [
-    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
+    "txt", "md", "pdf", "png", "jpg", "jpeg", "json", "docx", "doc", "ppt",
+    "pptx", "xls", "xlsx", "mp4", "mp3", "wav", "avi", "mov", "zip", "rar",
+    "pkg", "dmg", "dll", "py", "c", "cpp", "java", "js", "html", "css", "xml", "csv", "ts"
   ]
 }
 ```
+
+**`config/default.json`**
 ```json
-default.json
 {
   "allowed_paths": [
     "~/Desktop",
@@ -99,19 +116,32 @@ default.json
   ],
   "max_file_size": "20MB",
   "allowed_extensions": [
-    "txt", "md", "pdf", "png", "jpg","jpeg", "json", "docx", "doc", "ppt", "pptx", "xls", "xlsx"
+    "txt", "md", "pdf", "png", "jpg", "jpeg", "json", "docx", "doc", "ppt",
+    "pptx", "xls", "xlsx", "mp4", "mp3", "wav", "avi", "mov", "zip", "rar",
+    "msi", "exe", "pkg", "dmg", "dll", "py", "c", "cpp", "java", "js", "html", "css", "xml", "csv", "ts",
+    "CATPart", "CATProduct", "CATDrawing", "CATProcess"
   ]
 }
 ```
 
-### Configure Claude Desktop as follows:
+### Environment Variable Overrides
+
+You can optionally override the JSON configuration via environment variables:
+
+- `FILESYSTEM_ALLOWED_PATHS`: OS path-separated list of allowed directories (e.g., `:` on Linux/macOS, `;` on Windows)
+- `FILESYSTEM_MAX_FILE_SIZE`: Maximum allowed file size (e.g., `20MB`, `500KB`, `1GB`)
+- `FILESYSTEM_ALLOWED_EXTENSIONS`: Comma-separated list of allowed extensions (e.g., `txt,md,py,json`)
+
+---
+
+### Configure Claude Desktop
 
 ```json
 {
   "mcpServers": {
     "python-filesystem": {
-      "command": "C:\\Users\\username\\.local\\bin\\uv.EXE",
-      "args":[
+      "command": "C:\\Users\\username\\.local\\bin\\uv.exe",
+      "args": [
         "run",
         "--with",
         "mcp[cli]",
@@ -124,9 +154,9 @@ default.json
 }
 ```
 
-### Configure OpenCode as follows:
+### Configure OpenCode
 
-> Find your OpenCode global ".config" directory and open the "opencode.jsonc" file with your favorite IDE
+> Open your global OpenCode `.config` directory and edit `opencode.jsonc`:
 
 ```json
 {
@@ -148,63 +178,73 @@ default.json
 }
 ```
 
-### Configure Antigravity CLI as follows:
+### Configure Antigravity CLI
 
-> Find your Antigravity CLI global standalone MCP Configuration file under ".gemini"->"config"->"mcp_config.json" and paste following mcp schema and adjust it to your system:
+> Open your global standalone Antigravity CLI MCP configuration file under `.gemini/config/mcp_config.json` and adjust the paths to your system:
 
 ```json
 {
-    "mcpServers": {
-        "filesystem-mcp-server": {
-            "command": "C:\\Users\\username\\.local\\bin\\uv.exe",
-            "args": [
-                "run",
-                "--project",
-                "C:\\Users\\username\\Documents\\filesystem_mcp_server",
-                "python",
-                "C:\\Users\\username\\Documents\\filesystem_mcp_server\\src\\main.py"
-            ],
-            "env": {}
-        }
+  "mcpServers": {
+    "filesystem-mcp-server": {
+      "command": "C:\\Users\\username\\.local\\bin\\uv.exe",
+      "args": [
+        "run",
+        "--project",
+        "C:\\Users\\username\\Documents\\filesystem_mcp_server",
+        "python",
+        "C:\\Users\\username\\Documents\\filesystem_mcp_server\\src\\main.py"
+      ],
+      "env": {}
     }
+  }
 }
 ```
-
 
 ---
 
 ## 🛠️ Tools / API Functions
 
-* `read_file`, `write_file`, `edit_file`
-* `list_directory`, `create_directory`, `move_file`, `delete_file`
-* `search_files`, `get_file_info`
+### File Operations
+- `read_file`: Reads plaintext UTF-8 content from an approved file
+- `write_file`: Writes or appends UTF-8 text payloads to a file safely
+- `move_file`: Moves files safely under deterministic synchronization locks
+- `copy_file`: Copies files with metadata preservation (`shutil.copy2`)
+- `delete_file`: Moves a file to the operating system recycling bin via `send2trash`
+- `search_file`: Recursively searches for files matching a keyword in their filename
+- `get_file_info`: Retrieves safe metadata (`name`, `size`, `modified`, `is_directory`)
 
-All handlers are fully async and support detailed logging and secure validations.
+### Directory & Policy Operations
+- `list_files`: Lists all files inside a directory
+- `list_directories`: Lists all subdirectories inside a directory
+- `list_directory_content`: Lists all entries (both files and folders) in a directory
+- `create_directory`: Recursively creates directories inside authorized paths
+- `move_directory`: Moves folder trees with deterministic locking
+- `copy_directory`: Performs recursive directory cloning
+- `delete_directory`: Moves a directory structure to the OS recycling bin
+- `get_allowed_paths`: Returns the currently configured allowed root paths
+
+All handlers run asynchronously via worker threads and enforce path boundary checks, extension whitelists, and deadlock-free locking.
 
 ---
 
 ## 🧪 Testing
 
+Run the BoundaryAttest and core operation test suite using `uv`:
+
 ```bash
-pytest tests/
+uv run --extra test pytest tests/test_boundaryattest.py
 ```
 
-Includes unit tests for:
+Includes tests for:
+- File I/O (`write_file`, `move_file`, `delete_file`) & exact byte preservation
+- Path validation & deterministic lock verification
+- Optional BoundaryAttest receipt signing, verification, and tamper detection
 
-* File I/O
-* Security module
-* Server error handling
-* Config parsing
+---
 
-### Experimental BoundaryAttest receipts
+### Experimental BoundaryAttest Receipts
 
-The server can optionally emit portable, Ed25519-signed BoundaryAttest Interop
-Profile v0.1 receipts after successful `write_file`, `move_file`, and
-`delete_file` operations. This proof of concept is off by default: ordinary
-single-user/local MCP deployments generally get sufficient visibility from
-their existing MCP and local logs, without signing-key or receipt-storage
-overhead. The feature is aimed at shared, multi-tenant, enterprise, CI/CD, and
-other trust-boundary environments where portable evidence may be useful.
+The server can optionally emit portable, Ed25519-signed BoundaryAttest Interop Profile v0.1 receipts after successful `write_file`, `move_file`, and `delete_file` operations. This proof of concept is **off by default**: ordinary single-user/local MCP deployments generally get sufficient visibility from their existing MCP and local logs, without signing-key or receipt-storage overhead. The feature is aimed at shared, multi-tenant, enterprise, CI/CD, and other trust-boundary environments where portable evidence may be useful.
 
 Install the optional dependency and configure the server process:
 
@@ -222,48 +262,29 @@ openssl genpkey -algorithm Ed25519 -out boundaryattest-dev-private.pem
 openssl pkey -in boundaryattest-dev-private.pem -pubout -out boundaryattest-dev-public.pem
 ```
 
-Each successful covered operation writes one uniquely named JSON receipt. Clear
-path references are relative to the matching configured allowed root, while the
-signed `materialized_action_hash` binds the exact resolved internal path(s).
-Writes bind the appended UTF-8 content digest plus exact pre/post file hashes;
-moves bind the source and actual final destination (including an appended source
-name when the destination argument is a directory); deletes bind the exact
-pre-trash bytes and have no post-delete artifact at the original path. File
-hashes are SHA-256 over raw bytes.
+Each successful covered operation writes one uniquely named JSON receipt. Clear path references are relative to the matching configured allowed root, while the signed `materialized_action_hash` binds the exact resolved internal path(s). Writes bind the appended UTF-8 content digest plus exact pre/post file hashes; moves bind the source and actual final destination (including an appended source name when the destination argument is a directory); deletes bind the exact pre-trash bytes and have no post-delete artifact at the original path. File hashes are SHA-256 over raw bytes.
 
-Verify with a public key obtained through a trusted path, optionally checking a
-current artifact's exact bytes:
+Verify with a public key obtained through a trusted path, optionally checking a current artifact's exact bytes:
 
 ```bash
 uv run --extra boundaryattest python src/verify_boundaryattest_receipt.py \
   RECEIPT.json EXPECTED_PUBLIC_KEY.pem --artifact FILE
 ```
 
-A valid result proves only that the expected key signed the unchanged claim and,
-when supplied, that the artifact bytes match the signed digest. It does not
-prove truth, wisdom, authorization, policy compliance, signer trustworthiness,
-runtime integrity, or production-grade key custody. The feature is experimental,
-non-transactional, and external to the MCP server: if an action succeeds but
-receipt emission fails, the action is not rolled back and the tool returns its
-success message with a prominent attestation warning. This invited test
-integration is not an endorsement, partnership, audit system, security
-guarantee, or production key-management system.
+A valid result proves only that the expected key signed the unchanged claim and, when supplied, that the artifact bytes match the signed digest. It does not prove truth, wisdom, authorization, policy compliance, signer trustworthiness, runtime integrity, or production-grade key custody. The feature is experimental, non-transactional, and external to the MCP server: if an action succeeds but receipt emission fails, the action is not rolled back and the tool returns its success message with a prominent attestation warning. This invited test integration is not an endorsement, partnership, audit system, security guarantee, or production key-management system.
 
 ---
 
-## 🧯 Known Issue
+## 🧯 Known Issues & Troubleshooting
 
-We encountered a **Cool Tooling** issue due to agent/model capabilities and currently not supporting file types. Adjust the config policies for more file type support to solve the file type support problem.
-
-### Temporary Workaround:
-
-Ensure Python is globally available in your `$PATH` or use a wrapper script to launch the server. Also, double-check that `--config` paths are correct and readable.
+- **Unsupported File Extensions:** If an agent cannot read or write a specific file type, add the extension to `allowed_extensions` in `config/windows.json`, `config/macos.json`, or `config/default.json` (or via `FILESYSTEM_ALLOWED_EXTENSIONS`).
+- **Path / `uv` Resolution:** Ensure `uv` is installed and referenced with its full path in your MCP client config if the client does not inherit your shell `PATH`.
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Whether it's bug fixes, new features, or documentation, feel free to fork the repo and submit a PR. Please check the `CONTRIBUTING.md` (coming soon) for guidelines.
+Contributions are welcome! Whether it's bug fixes, new features, or documentation improvements, feel free to fork the repository and submit a Pull Request.
 
 ---
 
@@ -275,7 +296,5 @@ MIT License
 
 ## 🙌 Acknowledgements
 
-* Inspired by the official [Filesystem MCP Server from Anthropic](https://www.anthropic.com/)
-* Based on the MCP 1.0 Protocol Specification
-
-```
+- Inspired by the official [Filesystem MCP Server from Anthropic](https://www.anthropic.com/)
+- Based on the MCP 1.0 Protocol Specification
