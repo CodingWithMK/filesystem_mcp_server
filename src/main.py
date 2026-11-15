@@ -160,7 +160,7 @@ async def read_file(path: str) -> str:
                 raise FileNotFoundError(f"'{target}' is not a file or does not exist.")
             if target.stat().st_size > MAX_FILE_SIZE:
                 raise ValueError("Target file size exceeds the configured max_file_size barrier.")
-            with open(target, "r", encoding="utf-8") as f:
+            with open(target, "r", encoding="utf-8", newline="") as f:
                 return f.read()
                 
         content = await asyncio.to_thread(_read)
@@ -185,7 +185,7 @@ async def write_file(path: str, content: str) -> str:
         @attest_write(BOUNDARY_ATTESTOR, target, ALLOWED_PATHS)
         def _write():
             target.parent.mkdir(parents=True, exist_ok=True)
-            with open(target, "a+", encoding="utf-8") as f:
+            with open(target, "a+", encoding="utf-8", newline="") as f:
                 f.write(content)
             return f"Successfully committed content to {target}"
 
